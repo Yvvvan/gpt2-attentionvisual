@@ -6,6 +6,7 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import math
+import numpy as np
 
 #color = ['r','orange','gold','yellowgreen','g','c','deepskyblue','b','darkviolet','violet','pink','slategray']
 color_cycle = plt.rcParams['axes.prop_cycle']
@@ -53,6 +54,7 @@ def model_view(attention):
             subplot_num += 1
     plt.savefig('fig/modelview')
     plt.show()
+    plt.close()
 
 def head_view(attention, **kwargs):
     """
@@ -126,6 +128,7 @@ def head_view(attention, **kwargs):
             subplot_num += 1
     plt.savefig('fig/headview_layer%d'%layer_num)
     plt.show()
+    plt.close()
 
 def neuron_view(qkv, attention, layer, head):
     """
@@ -156,10 +159,16 @@ def neuron_view(qkv, attention, layer, head):
         subplot_num = 1
         plt.figure(figsize=(50, 5))
         plt.suptitle('neuron view of the query and key value in Layer %d Head %d'%(layer,head), fontsize=20)
+        q_norm = np.interp(q[left].detach().numpy(), (q[left].min(), q[left].max()), (-1, +1))
+        scores = []
         for right in range(sentence_len):
             if right > left:
                 break
-            for line_subplot in range(line_plot):
+            k_norm = np.interp(k_t[right].detach().numpy(), (k_t[right].min(), k_t[right].max()), (-1, +1))
+            value = torch.mul(q[left],k_t[right])
+            value_norm = np.interp(value.detach().numpy(), (value.min(), value.max()), (-1, +1))
+            scores.append(sum(value.detach().numpy())/ math.sqrt(v.size(-1)))
+            for line_subplot in range(line_plot - 1):
                 current_plot = subplot_num + line_subplot
                 ax = plt.subplot(sentence_len, line_plot, current_plot)
                 ax.axis('off')
@@ -171,7 +180,7 @@ def neuron_view(qkv, attention, layer, head):
                     if line_subplot == 2:
                         plt.title('q x k (elementwise)')
                     if line_subplot == 3:
-                        plt.title('qk')
+                        plt.title('qk',x=0.05 )
                 if left == right and line_subplot == 0: # draw q
                     for i in range(q.size()[1]): # 64
                         if q[left][i].item() >= 0:
@@ -183,7 +192,7 @@ def neuron_view(qkv, attention, layer, head):
                                 0.5,  # width
                                 1,  # height
                                 color=c,
-                                alpha=abs(q[left][i].item())
+                                alpha=abs(q_norm[i])
                             )
                         )
                     ax.plot([0], [0])
@@ -198,14 +207,14 @@ def neuron_view(qkv, attention, layer, head):
                                 0.5,  # width
                                 1,  # height
                                 color=c,
-                                alpha=abs(k_t[right][i].item())
+                                alpha=abs(k_norm[i])
                             )
                         )
                     ax.plot([0], [0])
                 elif line_subplot == 2: # draw q*k(elementwise)
                     for i in range(q.size()[1]): # 64
-                        value = q[left][i].item() * k_t[right][i].item()
-                        if value >= 0:
+                        #value = q[left][i].item() * k_t[right][i].item()
+                        if value[i] >= 0:
                             c = color_neuron[0]  # +: orange
                         else: c = color_neuron[1]  # -: blue
                         ax.add_patch(
@@ -214,42 +223,56 @@ def neuron_view(qkv, attention, layer, head):
                                 0.5,  # width
                                 1,  # height
                                 color=c,
-                                alpha=abs(value)
+                                alpha=abs(value_norm[i])
                             )
                         )
                     ax.plot([0], [0])
-                elif line_subplot == 3: # draw q*k
-                    value = torch.matmul(q[left], k_t[right])/ math.sqrt(v.size(-1))
-                    if value >= 0:
-                        c = color_neuron[0]  # +: orange
-                    else:
-                        c = color_neuron[1]  # -: blue
-                    for i in range(8):  # 64/4
-                        if i == 0:
-                            ax.add_patch(
-                                patches.Rectangle(
-                                    (0, 0),  # (x,y)
-                                    4,  # width
-                                    1,  # height
-                                    color=c,
-                                    alpha=abs(value)
-                                )
-                            )
-                        else:
-                            ax.add_patch(
-                                patches.Rectangle(
-                                    (i*4, 0),  # (x,y)
-                                    4,  # width
-                                    1,  # height
-                                    color='r',
-                                    alpha=0
-                                )
-                            )
-                    ax.plot([0], [0])
             subplot_num += line_plot
+        #elif line_subplot == 3: # draw q*k
+        scores = np.array(scores)
+        if scores.max() < 0:
+            scores = np.interp(scores, (scores.min(), scores.max()), (scores.min(), abs(scores.max())))
+        if scores.min() < -1 or scores.max() > 1:
+            max = abs(scores.min())
+            if max < scores.max():
+                max = scores.max()
+            for i in range(len(scores)):
+                scores[i] /= max
+        for right in range(left+1):
+            score = scores[right]
+            if score >= 0:
+                c = color_neuron[0]  # +: orange
+            else:
+                c = color_neuron[1]  # -: blue
+            ax = plt.subplot(sentence_len, line_plot, (right + 1) * 4)
+            ax.axis('off')
+            if right == 0:
+                plt.title('qk', x=0.1)
+            for i in range(8):  # 64/4
+                if i == 0:
+                    ax.add_patch(
+                        patches.Rectangle(
+                            (0, 0),  # (x,y)
+                            4,  # width
+                            1,  # height
+                            color=c,
+                            alpha=abs(score)
+                        )
+                    )
+                else:
+                    ax.add_patch(
+                        patches.Rectangle(
+                            (i*4, 0),  # (x,y)
+                            4,  # width
+                            1,  # height
+                            color='r',
+                            alpha=0
+                        )
+                    )
+            ax.plot([0], [0])
         plt.savefig('fig/neuronview_layer%d_head%d_token%d' % (layer,head,left))
         plt.show()
-
+        plt.close()
     # w = torch.matmul(q, k) / math.sqrt(v.size(-1))
     # for i in range(w.size()[0]):
     #     for j in range(w.size()[0]):
@@ -258,15 +281,15 @@ def neuron_view(qkv, attention, layer, head):
     # w = torch.nn.Softmax(dim=-1)(w)
     # print(w)
     # print(attn)
-
-
-
-
-
-
-
-
     return
+
+def min_max_scale(t):
+    min = torch.min(t)
+    max = torch.max(t)
+    scaled = []
+    for i in range(t.size()[0]):
+        scaled.append((t[i]-min)/(max-min))
+    return torch.from_numpy(scaled)
 
 # --- debug ---------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -282,9 +305,9 @@ if __name__ == "__main__":
     generated = tokenizer.encode(text)
     context, past = torch.tensor([generated]), None
     logits, past, attention, qkv = model(context, past=past)
-    model_view(attention)
-    head_view(attention) # ,layer =
-    head_view(attention, layer=0)  # ,layer =
-    head_view(attention, layer=5)
-    head_view(attention, layer=11)  # ,layer =
+    # model_view(attention)
+    # head_view(attention) # ,layer =
+    # head_view(attention, layer=0)  # ,layer =
+    # head_view(attention, layer=5)
+    # head_view(attention, layer=11)  # ,layer =
     neuron_view(qkv, attention, 0, 0)
