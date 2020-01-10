@@ -44,7 +44,7 @@ class attention_analyse():
         # subplot
         if self.head_avg:
             # 2 sub-plot: 1.big show 12 heads, 2.small show the avg of 12 heads
-            rect1 = [0.08, 0.05, 228/325, 0.95]  # [left, bottom, wide, high]
+            rect1 = [0.1, 0.05, 228/325, 0.95]  # [left, bottom, wide, high]
             rect2 = [0.08+228/325, 0.05, 19/325, 0.95]
             main_ax = plt.axes(rect1)
             sub_ax = plt.axes(rect2,sharey=main_ax)
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     analyzer = attention_analyse(generated)
 
-    for _ in range(1):
+    for _ in range(5):
         logits, past, attention = model(context, past=past)
 
         # the last dimension(token) of logits is the possibility of each word in vocab
@@ -141,7 +141,7 @@ if __name__ == "__main__":
         generated.append(context.item())
         generated_token = tokenizer.decode(context.item())
 
-        analyzer.show(attention, generated, decode=True, head_avg=True)
+        analyzer.show(attention, generated, decode=True, head_avg=True, layer=2)
 
     sequence = tokenizer.decode(generated)
 
