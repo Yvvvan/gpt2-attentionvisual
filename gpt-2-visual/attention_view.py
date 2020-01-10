@@ -270,7 +270,7 @@ def neuron_view(qkv, attention, layer, head):
                         )
                     )
             ax.plot([0], [0])
-        plt.savefig('fig/neuronview_layer%d_head%d_token%d' % (layer,head,left))
+        plt.savefig('fig/neuronview_layer%d_head%d_token%d' % (layer,head,left),bbox_inches='tight')
         plt.show()
         plt.close()
     # w = torch.matmul(q, k) / math.sqrt(v.size(-1))
@@ -283,22 +283,14 @@ def neuron_view(qkv, attention, layer, head):
     # print(attn)
     return
 
-def min_max_scale(t):
-    min = torch.min(t)
-    max = torch.max(t)
-    scaled = []
-    for i in range(t.size()[0]):
-        scaled.append((t[i]-min)/(max-min))
-    return torch.from_numpy(scaled)
-
 # --- debug ---------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
 
-    from sources.modeling_gpt2 import GPT2Model, GPT2LMHeadModel
+    from sources.modeling_gpt2_qkv import GPT2Model, GPT2LMHeadModel
     from sources.tokenization_gpt2 import GPT2Tokenizer
 
     text = 'I hate the movie last night. It is really bad.'
-    text = 'I hate the movie'
+    text = 'I hate the movie. It is really bad.'
 
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     model = GPT2LMHeadModel.from_pretrained('gpt2', output_attentions=True)

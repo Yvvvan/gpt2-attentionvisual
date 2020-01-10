@@ -1,3 +1,7 @@
+"""This script is used to learn how to get attention from the gpt-2 
+, and later, how to use the attention
+"""
+
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -10,7 +14,7 @@ warnings.filterwarnings("ignore")
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 model = GPT2LMHeadModel.from_pretrained('gpt2', output_attentions=True)
 
-generated = tokenizer.encode('A unicorn is a fascinating')
+generated = tokenizer.encode('I love my dog')
 context, past = torch.tensor([generated]), None
 
 for _ in range(1):
