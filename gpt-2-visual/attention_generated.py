@@ -5,20 +5,17 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from sources.tokenization_gpt2 import GPT2Tokenizer
 # import math
-# import numpy as np
+import numpy as np
+
 
 class attention_analyse():
-
     def __init__(self):
-        # temp_data for only one generated word
-        self.text = None  # original input + generated
-        self.attn = None
         # parameters
         self.decode = False
         self.avg = True
-        self.show_layer = 11
+        self.show_layer = 11 # should be 0-11; but if not, only layer_avg_view will be shown
         self.layer_avg = False
-        # save_data for the whole call in form: {'word': }
+        # save_data
         self.generated_dict = {}
 
     def setup_subplot(self, subplot):
@@ -34,10 +31,10 @@ class attention_analyse():
             plts = [plt.axes()]
         return plts
 
-    def draw(self,plts, a, t):
+    def draw(self, plts, a, t):
         '''
-        this funktion is used to draw the attention (whatever attn from gpt-2 or own-built attention),
-        which is in form  12_heads(or layers) * b *n_tocken.
+        this function is used to draw the attention (whatever attn from gpt-2 or own-built attention),
+        which is in form  12_heads(or layers) * b * n_tocken.
         if the input attention is directly from gpt-2: b = n_tocken,
         if the input attention is own-built: b = 1
         we only consider the attention of generated word, which means the attention of last word: b -> -1
@@ -104,9 +101,7 @@ class attention_analyse():
             plts[0].text(12.5, (len(t) - 1) / 2, t[-1], ha='left', va='center')
         return
 
-    def update(self, attention, generated, **kwargs):
-        self.text = generated
-        self.attn = attention
+    def update(self, **kwargs):
         if 'decode' in kwargs:
             self.decode = kwargs['decode']
         if 'avg' in kwargs:
@@ -116,27 +111,20 @@ class attention_analyse():
         if 'layer_avg' in kwargs:
             self.layer_avg = kwargs['layer_avg']
 
-    def save(self, text, attn, layer_sum):
-        if text[-1] not in self.generated_dict:
-            self.generated_dict[text[-1]] = {'attn':[], 'layer_avg':[], 'input':[]}
-        self.generated_dict[text[-1]]['attn'].append(attn)
-        self.generated_dict[text[-1]]['layer_avg'].append(layer_sum)
-        self.generated_dict[text[-1]]['input'].append(text[:-1])
-
     def show_attention(self, attention, generated, **kwargs):
         # update
-        self.update(attention, generated, **kwargs)
+        self.update(**kwargs)
 
         # if decode, show the words; otherwise show the number of the words
-        # why: because in some situations, a word will be decoded in more than one part. And we dont know that.
+        # why: because in some situations, a word will be decoded in more than one part. And we dont know how.
         # eg. understood <--> under stood
         if self.decode:
             # from transformers import GPT2Tokenizer
-            tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            decoder = GPT2Tokenizer.from_pretrained('gpt2')
             text = []
-            for token in self.text:
-                text.append(tokenizer.decode(token))
-            self.text = text
+            for token in generated:
+                text.append(decoder.decode(token))
+            generated = text
 
         # pic part
         # set subplot
@@ -145,51 +133,90 @@ class attention_analyse():
         # used to calculate the layer_avg
         layer_sum = []
 
-        for (layer, a) in enumerate(self.attn):  # 12 Layers
+        for (layer, a) in enumerate(attention):  # 12 Layers
             # used to calculate the layer_avg
             if self.layer_avg:
-                layer_sum.append([[0] * (len(self.text) - 1)])
+                layer_sum.append([[0] * (len(generated) - 1)])
                 for (head, b) in enumerate(a[0]):
                     for (token_num, c) in enumerate(b[-1]):
                         layer_sum[layer][0][token_num] += c / 12
             #  Draw only the certain layer
             if layer == self.show_layer:
                 # Title
-                plts[0].text(6.5, -1.2, 'Heads in Layer %d'%layer, ha='center', va='center')
+                plts[0].text(6.5, -1.2, 'Heads in Layer %d' % layer, ha='center', va='center')
                 # Draw
-                self.draw(plts,a[0], self.text)
-        plt.show()
-        plt.close()
+                self.draw(plts, a[0], generated)
+                plt.show()
+                plt.close()
 
-        #if draw all layer_avg
+        # if draw all layer_avg
         if self.layer_avg:
             plts2 = self.setup_subplot(self.avg)
-            self.draw(plts2, layer_sum, self.text)
-            plts2[0].text(6.5, -1.2, 'Layer Avg' , ha='center', va='center')
+            self.draw(plts2, layer_sum, generated)
+            plts2[0].text(6.5, -1.2, 'Layer Avg', ha='center', va='center')
             plt.show()
             plt.close()
 
+    def save(self, text, attn, layer_sum):
+        if text[-1] not in self.generated_dict:
+            self.generated_dict[text[-1]] = {'attn': [], 'layer_avg': [], 'input': []}
+        self.generated_dict[text[-1]]['attn'].append(attn)
+        self.generated_dict[text[-1]]['layer_avg'].append(layer_sum)
+        self.generated_dict[text[-1]]['input'].append(text)
+
     def save_attention(self, attention, generated, **kwargs):
-        self.update(attention, generated, **kwargs)
+        self.update(**kwargs)
+        if self.decode:
+            # from transformers import GPT2Tokenizer
+            decoder = GPT2Tokenizer.from_pretrained('gpt2')
+            text = []
+            for token in generated:
+                text.append(decoder.decode(token))
+            generated = text
         layer_sum = []
-        for (layer, a) in enumerate(self.attn):  # 12 Layers
-            layer_sum.append([[0] * (len(self.text) - 1)])
+        for (layer, a) in enumerate(attention):  # 12 Layers
+            layer_sum.append([[0] * (len(generated) - 1)])
             for (head, b) in enumerate(a[0]):
                 for (token_num, c) in enumerate(b[-1]):
                     layer_sum[layer][0][token_num] += c / 12
-        self.save(self.text, self.attn, layer_sum)
+        self.save(generated, attention, layer_sum)
 
     def show_sorted(self):
         for word in self.generated_dict:
-            print(word)
-            print(self.generated_dict[word]['layer_avg'])
+            if word != ' I':
+                continue
+            min_len = len(self.generated_dict[word]['input'][0])  # include generated word
+            for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
+                text_len = len(self.generated_dict[word]['input'][loop])
+                if text_len < min_len:
+                    min_len = text_len
+                plts = self.setup_subplot(True)
+                self.draw(plts, layer_avg, self.generated_dict[word]['input'][loop])  # include generated word
+                plts[0].text(6.5, -1.2, 'Layer Avg', ha='center', va='center')
+                plt.show()
+                plt.close()
+            pos = list(range(- 1 * (min_len - 1), 0))
+            avg_attn = []
+            for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
+                for (layer, layer_attn) in enumerate(layer_avg):
+                    if loop == 0: avg_attn.append([[0] * (min_len - 1)])
+                    #print(layer_attn[-1][-1 * min_len:])
+                    norm = self.norm(layer_attn[-1][(- 1 * (min_len - 1)):])
+                    #print(loop, layer, norm, sum(norm))
+                    for (token, token_attn) in enumerate(norm):
+                        avg_attn[layer][0][token] += norm[token] / len(self.generated_dict[word]['layer_avg'])
+            plts = self.setup_subplot(True)
+            self.draw(plts, avg_attn, pos+[word])
+            plt.show()
+            plt.close()
+            break
 
-
+    def norm(self,list):
+        return [float(i)/sum(list) for i in list]
 
 
 # -- debug ---------------
 if __name__ == "__main__":
-
     from sources.modeling_gpt2 import GPT2Model, GPT2LMHeadModel
     from sources.tokenization_gpt2 import GPT2Tokenizer
     import torch
@@ -197,9 +224,9 @@ if __name__ == "__main__":
     input_text = "I don't like the movie."
     input_texts = ["I don't like the movie.",
                    "I like the movie.",
-                   # "The movie is terrible.",
-                   # "The movie is wonderful.",
-                   # "I love my dog.",
+                   "The movie is terrible.",
+                   "The movie is wonderful.",
+                   "I love my dog.",
                    "I love my cat."]
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     model = GPT2LMHeadModel.from_pretrained('gpt2', output_attentions=True)
@@ -219,10 +246,11 @@ if __name__ == "__main__":
             generated.append(context.item())
             generated_token = tokenizer.decode(context.item())
 
-            #analyzer.show_attention(attention, generated, decode=True, avg=True, layer=0, layer_avg=False)
-            analyzer.save_attention(attention, generated)
+            #analyzer.show_attention(attention, generated, decode=True, avg=True, layer=12, layer_avg=True)
+            analyzer.save_attention(attention, generated, decode=True)
 
         sequence = tokenizer.decode(generated)
 
     analyzer.show_sorted()
-    stop=''
+    stop = ''
+
