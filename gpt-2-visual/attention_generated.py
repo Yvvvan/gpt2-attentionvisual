@@ -5,16 +5,17 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from sources.tokenization_gpt2 import GPT2Tokenizer
 # import math
-import numpy as np
+# import numpy as np
 
 
 class attention_analyse():
     def __init__(self):
         # parameters
         self.decode = False
-        self.avg = True
+        self.avg = True # the subplot in the right
         self.show_layer = 11 # should be 0-11; but if not, only layer_avg_view will be shown
-        self.layer_avg = False
+        self.layer_avg = False # new pic to show the layers situation
+        self.show_generation = False
         # save_data
         self.generated_dict = {}
 
@@ -104,12 +105,12 @@ class attention_analyse():
     def update(self, **kwargs):
         if 'decode' in kwargs:
             self.decode = kwargs['decode']
-        if 'avg' in kwargs:
-            self.avg = kwargs['avg']
+        if 'show_avgplot' in kwargs:
+            self.avg = kwargs['show_avgplot']
         if 'layer' in kwargs:
             self.show_layer = kwargs['layer']
-        if 'layer_avg' in kwargs:
-            self.layer_avg = kwargs['layer_avg']
+        if 'show_layeravg' in kwargs:
+            self.layer_avg = kwargs['show_layeravg']
 
     def show_attention(self, attention, generated, **kwargs):
         # update
@@ -181,35 +182,48 @@ class attention_analyse():
                     layer_sum[layer][0][token_num] += c / 12
         self.save(generated, attention, layer_sum)
 
-    def show_sorted(self):
-        for word in self.generated_dict:
-            if word != ' I':
-                continue
-            min_len = len(self.generated_dict[word]['input'][0])  # include generated word
-            for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
-                text_len = len(self.generated_dict[word]['input'][loop])
-                if text_len < min_len:
-                    min_len = text_len
+    def show_sorted(self, **kwargs):
+        if 'search' in kwargs:
+            word = kwargs['search']
+            if word not in self.generated_dict:
+                print("generated word not found.")
+                if ' '+word in self.generated_dict:
+                    print("try to add a space(' ') in the front of the word")
+                return
+        else:
+            for word in self.generated_dict:
+                break
+
+        if 'show_generation' in kwargs:
+            self.show_generation = kwargs['show_generation']
+
+        min_len = len(self.generated_dict[word]['input'][0])  # include generated word
+        for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
+            text_len = len(self.generated_dict[word]['input'][loop])
+            if text_len < min_len:
+                min_len = text_len
+            # to draw all generated-situation of this word
+            if self.show_generation:
                 plts = self.setup_subplot(True)
                 self.draw(plts, layer_avg, self.generated_dict[word]['input'][loop])  # include generated word
                 plts[0].text(6.5, -1.2, 'Layer Avg', ha='center', va='center')
                 plt.show()
                 plt.close()
-            pos = list(range(- 1 * (min_len - 1), 0))
-            avg_attn = []
-            for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
-                for (layer, layer_attn) in enumerate(layer_avg):
-                    if loop == 0: avg_attn.append([[0] * (min_len - 1)])
-                    #print(layer_attn[-1][-1 * min_len:])
-                    norm = self.norm(layer_attn[-1][(- 1 * (min_len - 1)):])
-                    #print(loop, layer, norm, sum(norm))
-                    for (token, token_attn) in enumerate(norm):
-                        avg_attn[layer][0][token] += norm[token] / len(self.generated_dict[word]['layer_avg'])
-            plts = self.setup_subplot(True)
-            self.draw(plts, avg_attn, pos+[word])
-            plt.show()
-            plt.close()
-            break
+        pos = list(range(- 1 * (min_len - 1), 0))
+        avg_attn = []
+        for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
+            for (layer, layer_attn) in enumerate(layer_avg):
+                if loop == 0: avg_attn.append([[0] * (min_len - 1)])
+                #print(layer_attn[-1][-1 * min_len:])
+                norm = self.norm(layer_attn[-1][(- 1 * (min_len - 1)):])
+                #print(loop, layer, norm, sum(norm))
+                for (token, token_attn) in enumerate(norm):
+                    avg_attn[layer][0][token] += norm[token] / len(self.generated_dict[word]['layer_avg'])
+        plts = self.setup_subplot(True)
+        self.draw(plts, avg_attn, pos+[word])
+        plts[0].text(6.5, -1.2, "Avg Attention of '%s' in each Layer to different Position" % word, ha='center', va='center')
+        plt.show()
+        plt.close()
 
     def norm(self,list):
         return [float(i)/sum(list) for i in list]
@@ -222,12 +236,15 @@ if __name__ == "__main__":
     import torch
 
     input_text = "I don't like the movie."
-    input_texts = ["I don't like the movie.",
-                   "I like the movie.",
-                   "The movie is terrible.",
-                   "The movie is wonderful.",
-                   "I love my dog.",
-                   "I love my cat."]
+    input_texts = [
+                   # "I don't like the movie.",
+                   # "I like the movie.",
+                   # "The movie is terrible.",
+                   # "The movie is wonderful.",
+                   # "I love my dog.",
+                   "I love my cat. It is so lovely and beautiful. "
+                   "I'd love to play with it everyday."
+                ]
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     model = GPT2LMHeadModel.from_pretrained('gpt2', output_attentions=True)
 
@@ -246,11 +263,11 @@ if __name__ == "__main__":
             generated.append(context.item())
             generated_token = tokenizer.decode(context.item())
 
-            #analyzer.show_attention(attention, generated, decode=True, avg=True, layer=12, layer_avg=True)
-            analyzer.save_attention(attention, generated, decode=True)
+            #analyzer.show_attention(attention, generated, decode=True, show_avgplot=True, layer=12, show_layeravg=True)
+            analyzer.save_attention(attention, generated, decode = True)
 
         sequence = tokenizer.decode(generated)
 
-    analyzer.show_sorted()
+    analyzer.show_sorted(search=' I', show_generation = True)
     stop = ''
 
