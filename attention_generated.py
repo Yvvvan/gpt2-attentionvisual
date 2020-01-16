@@ -147,7 +147,7 @@ class AttentionAnalyser():
 
         # pic part
         # set subplot
-        plts = self.setup_subplot(self.avg)
+        plts = self._setup_subplot(self.avg)
 
         # used to calculate the layer_avg
         layer_sum = []
@@ -164,24 +164,18 @@ class AttentionAnalyser():
                 # Title
                 plts[0].text(6.5, -1.2, 'Heads in Layer %d' % layer, ha='center', va='center')
                 # Draw
-                self.draw(plts, a[0], generated)
+                self._draw(plts, a[0], generated)
                 plt.show()
                 plt.close()
 
         # if draw all layer_avg
         if self.layer_avg:
-            plts2 = self.setup_subplot(self.avg)
-            self.draw(plts2, layer_sum, generated)
+            plts2 = self._setup_subplot(self.avg)
+            self._draw(plts2, layer_sum, generated)
             plts2[0].text(6.5, -1.2, 'Layer Avg', ha='center', va='center')
             plt.show()
             plt.close()
 
-    def save(self, text, attn, layer_sum):
-        if text[-1] not in self.generated_dict:
-            self.generated_dict[text[-1]] = {'attn': [], 'layer_avg': [], 'input': []}
-        self.generated_dict[text[-1]]['attn'].append(attn)
-        self.generated_dict[text[-1]]['layer_avg'].append(layer_sum)
-        self.generated_dict[text[-1]]['input'].append(text)
 
     def save_attention(self, attention, generated, **kwargs):
         self.update(**kwargs)
@@ -198,7 +192,11 @@ class AttentionAnalyser():
             for (head, b) in enumerate(a[0]):
                 for (token_num, c) in enumerate(b[-1]):
                     layer_sum[layer][0][token_num] += c / 12
-        self.save(generated, attention, layer_sum)
+        if generated[-1] not in self.generated_dict:
+            self.generated_dict[generated[-1]] = {'attn': [], 'layer_avg': [], 'input': []}
+        self.generated_dict[generated[-1]]['attn'].append(attention)
+        self.generated_dict[generated[-1]]['layer_avg'].append(layer_sum)
+        self.generated_dict[generated[-1]]['input'].append(generated)
 
     def show_sorted(self, **kwargs):
         if 'search' in kwargs:
@@ -222,8 +220,8 @@ class AttentionAnalyser():
                 min_len = text_len
             # to draw all generated-situation of this word
             if self.show_generation:
-                plts = self.setup_subplot(True)
-                self.draw(plts, layer_avg, self.generated_dict[word]['input'][loop])  # include generated word
+                plts = self._setup_subplot(True)
+                self._draw(plts, layer_avg, self.generated_dict[word]['input'][loop])  # include generated word
                 plts[0].text(6.5, -1.2, 'Layer Avg', ha='center', va='center')
                 plt.show()
                 plt.close()
@@ -233,17 +231,18 @@ class AttentionAnalyser():
             for (layer, layer_attn) in enumerate(layer_avg):
                 if loop == 0: avg_attn.append([[0] * (min_len - 1)])
                 #print(layer_attn[-1][-1 * min_len:])
-                norm = self.norm(layer_attn[-1][(- 1 * (min_len - 1)):])
+                norm = self._norm(layer_attn[-1][(- 1 * (min_len - 1)):])
                 #print(loop, layer, norm, sum(norm))
                 for (token, token_attn) in enumerate(norm):
                     avg_attn[layer][0][token] += norm[token] / len(self.generated_dict[word]['layer_avg'])
-        plts = self.setup_subplot(True)
-        self.draw(plts, avg_attn, pos+[word])
+        plts = self._setup_subplot(True)
+        self._draw(plts, avg_attn, pos+[word])
         plts[0].text(6.5, -1.2, "Avg Attention of '%s' in each Layer to different Position" % word, ha='center', va='center')
         plt.show()
         plt.close()
 
-    def norm(self,list):
+    @staticmethod
+    def _norm(list):
         return [float(i)/sum(list) for i in list]
 
 
@@ -257,16 +256,16 @@ if __name__ == "__main__":
     input_texts = [
                    # "I don't like the movie.",
                    # "I like the movie.",
-                   # "The movie is terrible.",
-                   # "The movie is wonderful.",
-                   # "I love my dog.",
+                   "The movie is terrible.",
+                   "The movie is wonderful.",
+                   "I love my dog.",
                    "I love my cat. It is so lovely and beautiful. "
                    "I'd love to play with it everyday."
                 ]
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     model = GPT2LMHeadModel.from_pretrained('gpt2', output_attentions=True)
 
-    analyzer = attention_analyse()
+    analyzer = AttentionAnalyser()
 
     for input_text in input_texts:
         generated = tokenizer.encode(input_text)
@@ -279,13 +278,12 @@ if __name__ == "__main__":
             context = torch.multinomial(torch.nn.functional.softmax(logits[:, -1]), 1)
 
             generated.append(context.item())
-            generated_token = tokenizer.decode(context.item())
 
             #analyzer.show_attention(attention, generated, decode=True, show_avgplot=True, layer=12, show_layeravg=True)
             analyzer.save_attention(attention, generated, decode = True)
 
         sequence = tokenizer.decode(generated)
 
-    analyzer.show_sorted(search=' I', show_generation = True)
+    analyzer.show_sorted( show_generation = True)
     stop = ''
 
