@@ -8,7 +8,7 @@ from sources.tokenization_gpt2 import GPT2Tokenizer
 # import numpy as np
 
 
-class attention_analyse():
+class AttentionAnalyser():
     def __init__(self):
         # parameters
         self.decode = False
@@ -19,7 +19,13 @@ class attention_analyse():
         # save_data
         self.generated_dict = {}
 
-    def setup_subplot(self, subplot):
+    @ staticmethod
+    def _setup_subplot(subplot):
+        """
+        this method is used to setup the plot
+        :param subplot: Boolean. it will decide whether to add a subplot that shows the avg of 12 heads/layers.
+        :return: List. [p1, p2] pr [p1]. the 12 heads or layers are located in p1. p2 is for the avg.
+        """
         if subplot:
             # 2 sub-plot: 1.big show 12 heads, 2.small show the avg of 12 heads
             rect1 = [0.11, 0.05, 228/325, 0.95]  # [left, bottom, wide, high]
@@ -32,18 +38,18 @@ class attention_analyse():
             plts = [plt.axes()]
         return plts
 
-    def draw(self, plts, a, t):
-        '''
+    def _draw(self, plts, a, t):
+        """
         this function is used to draw the attention (whatever attn from gpt-2 or own-built attention),
         which is in form  12_heads(or layers) * b * n_tocken.
         if the input attention is directly from gpt-2: b = n_tocken,
         if the input attention is own-built: b = 1
         we only consider the attention of generated word, which means the attention of last word: b -> -1
-        :param plts: plts=[p,p] with avg or [p] without avg
-        :param a: in size 12_heads(or layers) * b * n_tocken
-        :param t: text to show
+        :param plts: list. [p1,p2] with avg of 12 heads/layers, or [p1] without avg
+        :param a: ndarray / list / tensor. in size 12_heads(or layers) * b * n_tocken
+        :param t: String. text to show. eg."token_0 token_1 token_2 token_3 token_4 generated_word"
         :return:
-        '''
+        """
         # used to calculate the avg, will be drawn in the plts[1]
         avg_sum = [0] * (len(t) - 1)
         # Draw each head/layer as a column
@@ -103,6 +109,11 @@ class attention_analyse():
         return
 
     def update(self, **kwargs):
+        """
+        to update the parameters
+        :param kwargs: dictionary. parameters to update
+        :return:
+        """
         if 'decode' in kwargs:
             self.decode = kwargs['decode']
         if 'show_avgplot' in kwargs:
@@ -113,6 +124,13 @@ class attention_analyse():
             self.layer_avg = kwargs['show_layeravg']
 
     def show_attention(self, attention, generated, **kwargs):
+        """
+
+        :param attention:
+        :param generated:
+        :param kwargs:
+        :return:
+        """
         # update
         self.update(**kwargs)
 
