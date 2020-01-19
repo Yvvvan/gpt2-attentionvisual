@@ -18,6 +18,21 @@ class AttentionAnalyser():
         self.show_generation = False
         # save_data
         self.generated_dict = {}
+        self.save_plot = None
+
+    def reset(self):
+        """
+        reset the analyser
+        :return:
+        """
+        self.decode = False
+        self.avg = True  # the subplot in the right
+        self.show_layer = 11  # should be 0-11; but if not, only layer_avg_view will be shown
+        self.layer_avg = False  # new pic to show the layers situation
+        self.show_generation = False
+        # save_data
+        self.generated_dict = {}
+        self.save_plot = None
 
     @ staticmethod
     def _setup_subplot(subplot):
@@ -108,10 +123,16 @@ class AttentionAnalyser():
             plts[0].text(12.5, (len(t) - 1) / 2, t[-1], ha='left', va='center')
         return
 
-    def update(self, **kwargs):
+    def _update(self, **kwargs):
         """
         to update the parameters
-        :param kwargs: dictionary. parameters to update
+        :param kwargs: parameters to update
+            <decode>: Boolean. if True, it shows the words(in English); otherwise show the number of the words(tokenized word)
+            <show_avgplot>: Boolean. if True, it shows an avg plot in the right of all 12 Layers/Heads.
+            <layer>:  int. 0-11, it shows the certain Layer. (if not 0-11, show nothing. if we only want a layeravg↓.)
+            <show_layeravg>:  Boolean. It shows the avg of 12 Layers, after it shows the certain Layer
+            <save_plot>:  String/None. the address/filename to save. if None, dont save only show.
+            <show_generation>:  Boolean. see func: plot_by_word_statistics
         :return:
         """
         if 'decode' in kwargs:
@@ -122,17 +143,21 @@ class AttentionAnalyser():
             self.show_layer = kwargs['layer']
         if 'show_layeravg' in kwargs:
             self.layer_avg = kwargs['show_layeravg']
+        if 'save_plot' in kwargs:
+            self.save_plot = kwargs['save_plot']
+        if 'show_generation' in kwargs:
+            self.show_generation = kwargs['show_generation']
 
-    def show_attention(self, attention, generated, **kwargs):
+    def plot_single_attention_diagrams(self, attention, generated, **kwargs):
         """
-
-        :param attention:
-        :param generated:
-        :param kwargs:
+        this function is used to show the attention of the generated word
+        :param attention: ndarray / list / tensor
+        :param generated: String. input tokens + generated token
+        :param kwargs: parameters
         :return:
         """
         # update
-        self.update(**kwargs)
+        self._update(**kwargs)
 
         # if decode, show the words; otherwise show the number of the words
         # why: because in some situations, a word will be decoded in more than one part. And we dont know how.
@@ -165,6 +190,8 @@ class AttentionAnalyser():
                 plts[0].text(6.5, -1.2, 'Heads in Layer %d' % layer, ha='center', va='center')
                 # Draw
                 self._draw(plts, a[0], generated)
+                if self.save_plot is not None:
+                    plt.savefig('%s/single_attention_layer_%d'%(self.save_plot,layer))
                 plt.show()
                 plt.close()
 
@@ -173,12 +200,21 @@ class AttentionAnalyser():
             plts2 = self._setup_subplot(self.avg)
             self._draw(plts2, layer_sum, generated)
             plts2[0].text(6.5, -1.2, 'Layer Avg', ha='center', va='center')
+            if self.save_plot is not None:
+                plt.savefig('%s/single_attention_layer_avg'%(self.save_plot))
             plt.show()
             plt.close()
 
-
-    def save_attention(self, attention, generated, **kwargs):
-        self.update(**kwargs)
+    def add_attention(self, attention, generated, **kwargs):
+        """
+        this function is used to save the attentions of a input. when it records some attns, the recorded information
+        can be used to show the attn of a certain word.
+        :param attention:  ndarray / list / tensor
+        :param generated: String. input tokens + generated token
+        :param kwargs: parameter
+        :return:
+        """
+        self._update(**kwargs)
         if self.decode:
             # from transformers import GPT2Tokenizer
             decoder = GPT2Tokenizer.from_pretrained('gpt2')
@@ -198,7 +234,16 @@ class AttentionAnalyser():
         self.generated_dict[generated[-1]]['layer_avg'].append(layer_sum)
         self.generated_dict[generated[-1]]['input'].append(generated)
 
-    def show_sorted(self, **kwargs):
+    def plot_by_word_statistics(self, **kwargs):
+        """
+        this function is used to show the attention of a certain word among several generations.
+        :param kwargs: parameter
+            <search>: String/None. a certain word to show.
+                    if None, it will show the first generated word among all generations
+            <show_generation>: Boolean. if True, it will show all generation-situation of this word.
+            <save_plot>:  String/None. the address/filename to save. if None, dont save only show.
+        :return:
+        """
         if 'search' in kwargs:
             word = kwargs['search']
             if word not in self.generated_dict:
@@ -209,11 +254,13 @@ class AttentionAnalyser():
         else:
             for word in self.generated_dict:
                 break
-
         if 'show_generation' in kwargs:
             self.show_generation = kwargs['show_generation']
+        if 'save_plot' in kwargs:
+            self.show_generation = kwargs['save_plot']
 
         min_len = len(self.generated_dict[word]['input'][0])  # include generated word
+        # for each generation(which generated the search-word)
         for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
             text_len = len(self.generated_dict[word]['input'][loop])
             if text_len < min_len:
@@ -223,8 +270,12 @@ class AttentionAnalyser():
                 plts = self._setup_subplot(True)
                 self._draw(plts, layer_avg, self.generated_dict[word]['input'][loop])  # include generated word
                 plts[0].text(6.5, -1.2, 'Layer Avg', ha='center', va='center')
+                if self.save_plot is not None:
+                    print("here")
+                    plt.savefig('%s/word_statistics_word_%s_generation_%d' % (self.save_plot, word, loop))
                 plt.show()
                 plt.close()
+
         pos = list(range(- 1 * (min_len - 1), 0))
         avg_attn = []
         for (loop, layer_avg) in enumerate(self.generated_dict[word]['layer_avg']):
@@ -238,11 +289,18 @@ class AttentionAnalyser():
         plts = self._setup_subplot(True)
         self._draw(plts, avg_attn, pos+[word])
         plts[0].text(6.5, -1.2, "Avg Attention of '%s' in each Layer to different Position" % word, ha='center', va='center')
+        if self.save_plot is not None:
+            plt.savefig('%s/word_statistics_word_%s' % (self.save_plot,word))
         plt.show()
         plt.close()
 
     @staticmethod
     def _norm(list):
+        """
+        a normalization function. can be replaced with other norm-func.
+        :param list: List / Tensor / np.array.
+        :return:
+        """
         return [float(i)/sum(list) for i in list]
 
 
@@ -252,38 +310,48 @@ if __name__ == "__main__":
     from sources.tokenization_gpt2 import GPT2Tokenizer
     import torch
 
-    input_text = "I don't like the movie."
-    input_texts = [
-                   # "I don't like the movie.",
-                   # "I like the movie.",
-                   "The movie is terrible.",
-                   "The movie is wonderful.",
-                   "I love my dog.",
-                   "I love my cat. It is so lovely and beautiful. "
-                   "I'd love to play with it everyday."
-                ]
+
+
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     model = GPT2LMHeadModel.from_pretrained('gpt2', output_attentions=True)
 
     analyzer = AttentionAnalyser()
 
+    # ---- show single attention
+    # print("show single attention ...")
+    #
+    # input_text = "I don't like the movie."
+    # generated = tokenizer.encode(input_text)
+    # context, past = torch.tensor([generated]), None
+    # logits, past, attention = model(context, past=past)
+    # context = torch.multinomial(torch.nn.functional.softmax(logits[:, -1]), 1)
+    # generated.append(context.item())
+    #
+    # analyzer.plot_single_attention_diagrams(attention, generated, decode=True, show_avgplot=True,
+    #                                         layer=12, show_layeravg=True, save_plot='fig')
+
+    # ---- show word statistics
+    print("show word statistics ...")
+    analyzer.reset()
+    input_texts = [
+        "I don't like the movie.",
+        "I like the movie.",
+        "The movie is terrible.",
+        "The movie is wonderful.",
+        "I love my dog.",
+        "I love my cat."
+        ]
     for input_text in input_texts:
         generated = tokenizer.encode(input_text)
         context, past = torch.tensor([generated]), None
         for _ in range(5):
             logits, past, attention = model(context, past=past)
-
-            # the last dimension(token) of logits is the possibility of each word in vocab
-            # multinomial-function chooses the highest possible word
             context = torch.multinomial(torch.nn.functional.softmax(logits[:, -1]), 1)
-
             generated.append(context.item())
+            analyzer.add_attention(attention, generated, decode = True)
 
-            #analyzer.show_attention(attention, generated, decode=True, show_avgplot=True, layer=12, show_layeravg=True)
-            analyzer.save_attention(attention, generated, decode = True)
+    analyzer.plot_by_word_statistics(search=' I', show_generation = True, save_plot='fig')
 
-        sequence = tokenizer.decode(generated)
 
-    analyzer.show_sorted( show_generation = True)
     stop = ''
 
